@@ -41,7 +41,9 @@ def get_vege_price(keyword: str) -> str:
         # twfood.cc 搜尋結果連結通常在 a 標籤 href 屬性中
         product_card = None
         for a in soup.find_all('a', href=True):
-            if 'vege/' in a['href'] or 'fruit/' in a['href']:
+            href = a['href']
+            # 過濾掉分類連結，只抓商品連結
+            if ('/vege/' in href or '/fruit/' in href) and '/topic/' not in href:
                 product_card = a
                 break
         
