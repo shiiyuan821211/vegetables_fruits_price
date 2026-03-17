@@ -38,14 +38,41 @@ def get_vege_price(keyword: str) -> str:
         res.raise_for_status()
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # twfood.cc 搜尋結果連結通常在 a 標籤 href 屬性中
-        product_card = None
+        # 收集所有符合分類的商品連結
+        candidates = []
         for a in soup.find_all('a', href=True):
             href = a['href']
             # 過濾掉分類連結，只抓商品連結
             if ('/vege/' in href or '/fruit/' in href) and '/topic/' not in href:
-                product_card = a
-                break
+                text = a.get_text(separator=' ', strip=True)
+                if text and '更多細節' not in text:
+                    candidates.append((a, text))
+        
+        product_card = None
+        if candidates:
+            # 1. 類別名稱完全符合 (例如 "蘋果-五爪" 的 "蘋果")
+            for a, text in candidates:
+                if text.split('-')[0].strip() == keyword:
+                    product_card = a
+                    break
+            
+            # 2. 括號內的別名完全符合 (例如 "(高麗菜, 捲心菜)")
+            if not product_card:
+                for a, text in candidates:
+                    if f"({keyword}," in text or f" {keyword}," in text or f"{keyword})" in text or f"({keyword})" in text:
+                        product_card = a
+                        break
+
+            # 3. 包含關鍵字
+            if not product_card:
+                for a, text in candidates:
+                    if keyword in text:
+                        product_card = a
+                        break
+                        
+            # 4. 預設第一筆
+            if not product_card:
+                product_card = candidates[0][0]
         
         if not product_card:
             return f"找不到關於「{keyword}」的最新價格資訊哦！"
