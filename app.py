@@ -92,11 +92,11 @@ def get_vege_price(keyword: str) -> str:
             retail_100g = round(retail_kg / 10, 1)
             price_info = (
                 f"【預估零售價】\n"
-                f"{fmt(retail_jin)} (元/台斤)\n"
-                f"{fmt(retail_kg)} (元/公斤)\n"
-                f"{fmt(retail_100g)} (元/100g)"
+                f"{fmt(retail_100g)} (元/100g)\n"
+                f"{fmt(retail_jin)} (元/臺斤)\n"
+                f"{fmt(retail_kg)} (元/公斤)"
             )
-            return f"【{title_text}】最新市場行情：\n{price_info}\n\n來源：{first_product_url}"
+            return f"【{title_text}】最新市場行情：\n\n{price_info}\n\n來源：{first_product_url}"
         else:
             return f"【{title_text}】\n目前無法直接抓到預估零售價格，請參考網頁：{first_product_url}"
             
