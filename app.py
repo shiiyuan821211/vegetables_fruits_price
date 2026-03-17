@@ -64,7 +64,11 @@ def get_vege_price(keyword: str) -> str:
         
         # 抓取表格內的價格資訊
         th_elements = detail_soup.find_all('th')
-        result_lines = []
+        retail_kg = None
+        retail_jin = None
+        
+        current_section = ""
+        last_number = None
         
         if th_elements:
             for th in th_elements:
@@ -72,20 +76,29 @@ def get_vege_price(keyword: str) -> str:
                 if not text: continue
                 
                 if "價:" in text or "量:" in text:
-                    result_lines.append(f"\n【{text}】")
-                elif "(元" in text or "公噸" in text:
-                    result_lines[-1] += f" {text}"
-                else:
-                    if len(result_lines) > 0:
-                        result_lines.append(f"  - {text}")
-                    else:
-                        result_lines.append(text)
-                        
-        if result_lines:
-            price_info = "\n".join(result_lines).strip()
-            return f"🥬 【{title_text}】最新市場行情：\n{price_info}\n\n來源：{first_product_url}"
+                    current_section = text
+                elif current_section == "預估零售價:":
+                    try:
+                        last_number = float(text)
+                    except ValueError:
+                        if "(元/公斤)" in text and last_number is not None:
+                            retail_kg = last_number
+                        elif "(元/台斤)" in text and last_number is not None:
+                            retail_jin = last_number
+                            
+        def fmt(n): return int(n) if n.is_integer() else n
+
+        if retail_kg is not None and retail_jin is not None:
+            retail_100g = round(retail_kg / 10, 1)
+            price_info = (
+                f"【預估零售價】\n"
+                f"{fmt(retail_jin)} (元/台斤)\n"
+                f"{fmt(retail_kg)} (元/公斤)\n"
+                f"{fmt(retail_100g)} (元/100g)"
+            )
+            return f"【{title_text}】最新市場行情：\n{price_info}\n\n來源：{first_product_url}"
         else:
-            return f"🥬 【{title_text}】\n目前無法直接抓到平均價格，請參考網頁：{first_product_url}"
+            return f"【{title_text}】\n目前無法直接抓到預估零售價格，請參考網頁：{first_product_url}"
             
     except requests.exceptions.RequestException as e:
         print(f"Request Error: {e}")
