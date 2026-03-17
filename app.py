@@ -88,6 +88,17 @@ def get_vege_price(keyword: str) -> str:
                             
         def fmt(n): return int(n) if n.is_integer() else n
 
+        def shorten_url(u):
+            try:
+                r = requests.get(f"http://tinyurl.com/api-create.php?url={urllib.parse.quote(u)}", timeout=3)
+                if r.status_code == 200:
+                    return r.text
+            except:
+                pass
+            return u
+
+        short_url = shorten_url(first_product_url)
+
         if retail_kg is not None and retail_jin is not None:
             retail_100g = round(retail_kg / 10, 1)
             price_info = (
@@ -96,9 +107,9 @@ def get_vege_price(keyword: str) -> str:
                 f"{fmt(retail_jin)} (元/臺斤)\n"
                 f"{fmt(retail_kg)} (元/公斤)"
             )
-            return f"【{title_text}】最新市場行情：\n\n{price_info}\n\n來源：{first_product_url}"
+            return f"【{title_text}】最新市場行情：\n\n{price_info}\n\n來源：{short_url}"
         else:
-            return f"【{title_text}】\n目前無法直接抓到預估零售價格，請參考網頁：{first_product_url}"
+            return f"【{title_text}】\n目前無法直接抓到預估零售價格，請參考網頁：{short_url}"
             
     except requests.exceptions.RequestException as e:
         print(f"Request Error: {e}")
