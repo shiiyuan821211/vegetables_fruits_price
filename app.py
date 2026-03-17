@@ -62,11 +62,28 @@ def get_vege_price(keyword: str) -> str:
         title = detail_soup.find('h1')
         title_text = title.text.strip() if title else keyword
         
-        # 抓取平均價 (通常在 text-danger 裡面)
-        price_nodes = detail_soup.select('.text-danger')
-        if price_nodes and len(price_nodes) > 0:
-            price_info = price_nodes[0].text.strip()
-            return f"🥬 【{title_text}】最新市場行情：\n{price_info} 元/公斤\n\n來源：{first_product_url}"
+        # 抓取表格內的價格資訊
+        th_elements = detail_soup.find_all('th')
+        result_lines = []
+        
+        if th_elements:
+            for th in th_elements:
+                text = th.get_text(separator=' ', strip=True)
+                if not text: continue
+                
+                if "價:" in text or "量:" in text:
+                    result_lines.append(f"\n【{text}】")
+                elif "(元" in text or "公噸" in text:
+                    result_lines[-1] += f" {text}"
+                else:
+                    if len(result_lines) > 0:
+                        result_lines.append(f"  - {text}")
+                    else:
+                        result_lines.append(text)
+                        
+        if result_lines:
+            price_info = "\n".join(result_lines).strip()
+            return f"🥬 【{title_text}】最新市場行情：\n{price_info}\n\n來源：{first_product_url}"
         else:
             return f"🥬 【{title_text}】\n目前無法直接抓到平均價格，請參考網頁：{first_product_url}"
             
