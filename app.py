@@ -159,6 +159,10 @@ def get_vege_price(keyword: str) -> str:
         return "爬蟲解析發生錯誤 😭"
 
 
+@app.route("/", methods=['GET'])
+def ping():
+    return "Bot is alive!"
+
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
