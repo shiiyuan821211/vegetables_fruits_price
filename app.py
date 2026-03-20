@@ -3,6 +3,7 @@ import urllib.parse
 import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
+import datetime
 
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
@@ -76,9 +77,105 @@ def fetch_detail(item, headers):
         def fmt(n): return int(n) if n.is_integer() else n
 
         short_url = shorten_url(url)
+        
+        # --- 新增: 計算歷史價格漲跌幅 ---
+        percent_change = 0
+        alert_text = None
+        alert_color = "#000000"
+        
+        item_code = ""
+        parts = urllib.parse.urlparse(url).path.split('/')
+        if len(parts) >= 3:
+            item_code = parts[2]
+            
+        if item_code:
+            try:
+                today = datetime.date.today()
+                week_ago = today - datetime.timedelta(days=21)
+                start_day = week_ago.strftime("%Y-%m-%d")
+                hist_url = f'https://www.twfood.cc/api/FarmTradeSumWeeks?filter={{"order":"endDay asc","where":{{"itemCode":"{item_code}","startDay":{{"gte":"{start_day}"}}}}}}'
+                hist_res = requests.get(hist_url, headers=headers, timeout=5)
+                hist_data = hist_res.json()
+                if len(hist_data) >= 2:
+                    last_week_avg = hist_data[-2].get('avgPrice', 0)
+                    this_week_avg = hist_data[-1].get('avgPrice', 0)
+                    if last_week_avg > 0:
+                        percent_change = (this_week_avg - last_week_avg) / last_week_avg
+            except Exception as e:
+                pass
+
+        if percent_change >= 0.5:
+            alert_text = "🚨 價格暴漲中！"
+            alert_color = "#ff0000"
+        elif percent_change >= 0.2:
+            alert_text = "📈 目前價格偏高"
+            alert_color = "#ff6600"
+        elif percent_change <= -0.5:
+            alert_text = "💸 價格大跳水，超划算！"
+            alert_color = "#00aa00"
+        elif percent_change <= -0.2:
+            alert_text = "📉 目前價格便宜"
+            alert_color = "#00aa00"
+        # -------------------------------
 
         if retail_kg is not None and retail_jin is not None:
             retail_100g = round(retail_kg / 10, 1)
+            
+            body_contents = [
+              {
+                "type": "text",
+                "text": title_text,
+                "weight": "bold",
+                "size": "xl",
+                "wrap": True
+              }
+            ]
+            
+            if alert_text:
+                body_contents.append({
+                    "type": "text",
+                    "text": alert_text,
+                    "weight": "bold",
+                    "size": "md",
+                    "color": alert_color,
+                    "margin": "sm"
+                })
+                
+            body_contents.append({
+                "type": "box",
+                "layout": "vertical",
+                "margin": "lg",
+                "spacing": "sm",
+                "contents": [
+                  {
+                    "type": "box",
+                    "layout": "baseline",
+                    "spacing": "sm",
+                    "contents": [
+                      { "type": "text", "text": "價格(100g)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
+                      { "type": "text", "text": f"{fmt(retail_100g)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "baseline",
+                    "spacing": "sm",
+                    "contents": [
+                      { "type": "text", "text": "價格(臺斤)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
+                      { "type": "text", "text": f"{fmt(retail_jin)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
+                    ]
+                  },
+                  {
+                    "type": "box",
+                    "layout": "baseline",
+                    "spacing": "sm",
+                    "contents": [
+                      { "type": "text", "text": "價格(公斤)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
+                      { "type": "text", "text": f"{fmt(retail_kg)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
+                    ]
+                  }
+                ]
+            })
             
             # 回傳 Flex Message 氣泡的 Dictionary 格式
             return {
@@ -93,50 +190,7 @@ def fetch_detail(item, headers):
               "body": {
                 "type": "box",
                 "layout": "vertical",
-                "contents": [
-                  {
-                    "type": "text",
-                    "text": title_text,
-                    "weight": "bold",
-                    "size": "xl",
-                    "wrap": True
-                  },
-                  {
-                    "type": "box",
-                    "layout": "vertical",
-                    "margin": "lg",
-                    "spacing": "sm",
-                    "contents": [
-                      {
-                        "type": "box",
-                        "layout": "baseline",
-                        "spacing": "sm",
-                        "contents": [
-                          { "type": "text", "text": "價格(100g)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
-                          { "type": "text", "text": f"{fmt(retail_100g)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
-                        ]
-                      },
-                      {
-                        "type": "box",
-                        "layout": "baseline",
-                        "spacing": "sm",
-                        "contents": [
-                          { "type": "text", "text": "價格(臺斤)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
-                          { "type": "text", "text": f"{fmt(retail_jin)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
-                        ]
-                      },
-                      {
-                        "type": "box",
-                        "layout": "baseline",
-                        "spacing": "sm",
-                        "contents": [
-                          { "type": "text", "text": "價格(公斤)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
-                          { "type": "text", "text": f"{fmt(retail_kg)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
-                        ]
-                      }
-                    ]
-                  }
-                ]
+                "contents": body_contents
               },
               "footer": {
                 "type": "box",
