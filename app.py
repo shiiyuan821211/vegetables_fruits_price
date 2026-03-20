@@ -35,6 +35,7 @@ def shorten_url(u):
 
 def fetch_detail(item, headers):
     a, title_text = item
+    title_text = " ".join(title_text.split())
     url = a['href']
     if not url.startswith('http'):
         url = "https://www.twfood.cc" + url
