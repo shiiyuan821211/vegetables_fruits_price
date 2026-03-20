@@ -12,7 +12,9 @@ from linebot.v3.messaging import (
     ApiClient,
     MessagingApi,
     ReplyMessageRequest,
-    TextMessage
+    TextMessage,
+    FlexSendMessage,
+    FlexContainer
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
@@ -44,6 +46,10 @@ def fetch_detail(item, headers):
         res = requests.get(url, headers=headers, timeout=5)
         detail_soup = BeautifulSoup(res.text, 'html.parser')
         
+        # 抓取該農產品專屬圖標
+        img_tag = detail_soup.find('img', src=lambda s: s and '/img/code/' in s)
+        img_url = "https://www.twfood.cc" + img_tag['src'] if img_tag else "https://www.twfood.cc/images/logo2025-120x120.png"
+        
         th_elements = detail_soup.find_all('th')
         retail_kg = None
         retail_jin = None
@@ -73,23 +79,92 @@ def fetch_detail(item, headers):
 
         if retail_kg is not None and retail_jin is not None:
             retail_100g = round(retail_kg / 10, 1)
-            price_info = (
-                f"【{title_text}】最新市場行情：\n"
-                f"【預估零售價】\n"
-                f"{fmt(retail_100g)} (元/100g)\n"
-                f"{fmt(retail_jin)} (元/臺斤)\n"
-                f"{fmt(retail_kg)} (元/公斤)\n\n"
-                f"來源：{short_url}"
-            )
-            return price_info
+            
+            # 回傳 Flex Message 氣泡的 Dictionary 格式
+            return {
+              "type": "bubble",
+              "hero": {
+                "type": "image",
+                "url": img_url,
+                "size": "full",
+                "aspectRatio": "20:13",
+                "aspectMode": "cover"
+              },
+              "body": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                  {
+                    "type": "text",
+                    "text": title_text,
+                    "weight": "bold",
+                    "size": "xl",
+                    "wrap": True
+                  },
+                  {
+                    "type": "box",
+                    "layout": "vertical",
+                    "margin": "lg",
+                    "spacing": "sm",
+                    "contents": [
+                      {
+                        "type": "box",
+                        "layout": "baseline",
+                        "spacing": "sm",
+                        "contents": [
+                          { "type": "text", "text": "價格(100g)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
+                          { "type": "text", "text": f"{fmt(retail_100g)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
+                        ]
+                      },
+                      {
+                        "type": "box",
+                        "layout": "baseline",
+                        "spacing": "sm",
+                        "contents": [
+                          { "type": "text", "text": "價格(臺斤)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
+                          { "type": "text", "text": f"{fmt(retail_jin)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
+                        ]
+                      },
+                      {
+                        "type": "box",
+                        "layout": "baseline",
+                        "spacing": "sm",
+                        "contents": [
+                          { "type": "text", "text": "價格(公斤)", "color": "#aaaaaa", "size": "sm", "flex": 4 },
+                          { "type": "text", "text": f"{fmt(retail_kg)} 元", "wrap": True, "color": "#000000", "size": "sm", "flex": 5 }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "sm",
+                "contents": [
+                  {
+                    "type": "button",
+                    "style": "link",
+                    "height": "sm",
+                    "action": {
+                      "type": "uri",
+                      "label": "查看來源",
+                      "uri": short_url
+                    }
+                  }
+                ],
+                "flex": 0
+              }
+            }
         else:
-            return f"【{title_text}】\n目前無法直接抓到預估零售價格，請參考網頁：{short_url}"
+            return None
     except Exception as e:
         print(f"Error fetching detail: {e}")
-        return f"【{title_text}】 連線詳情頁面失敗"
+        return None
 
-def get_vege_price(keyword: str) -> str:
-    """去 twfood.cc 搜尋蔬果並回傳價格字串"""
+def get_vege_price(keyword: str):
+    """去 twfood.cc 搜尋蔬果並回傳價格 Flex 格式"""
     query = urllib.parse.quote(keyword)
     url = f"https://www.twfood.cc/search?q={query}"
     
@@ -102,11 +177,9 @@ def get_vege_price(keyword: str) -> str:
         res.raise_for_status()
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        # 收集所有符合分類的商品連結
         candidates = []
         for a in soup.find_all('a', href=True):
             href = a['href']
-            # 過濾掉分類連結，只抓商品連結
             if ('/vege/' in href or '/fruit/' in href) and '/topic/' not in href:
                 text = a.get_text(separator=' ', strip=True)
                 if text and '更多細節' not in text:
@@ -114,43 +187,37 @@ def get_vege_price(keyword: str) -> str:
         
         matched_items = []
         if candidates:
-            # 1. 類別名稱完全符合 (例如 "蘋果-五爪" 的 "蘋果")
             for a, text in candidates:
                 if text.split('-')[0].strip() == keyword:
                     matched_items.append((a, text))
-            
-            # 2. 括號內的別名完全符合 (例如 "(高麗菜, 捲心菜)")
             if not matched_items:
                 for a, text in candidates:
                     if f"({keyword}," in text or f" {keyword}," in text or f"{keyword})" in text or f"({keyword})" in text:
                         matched_items.append((a, text))
-
-            # 3. 包含關鍵字
             if not matched_items:
                 for a, text in candidates:
                     if keyword in text:
                         matched_items.append((a, text))
-                        
-            # 4. 預設第一筆
             if not matched_items:
                 matched_items = [candidates[0]]
         
         if not matched_items:
             return f"找不到關於「{keyword}」的最新價格資訊哦！"
             
-        # 限制最多返回5個品種，避免 LINE Timeout 或洗版
         matched_items = matched_items[:5]
         
         results = []
-        # 使用多執行緒同時抓取多個品種的價格
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             futures = [executor.submit(fetch_detail, item, headers) for item in matched_items]
             for future in concurrent.futures.as_completed(futures):
-                results.append(future.result())
+                data = future.result()
+                if data:
+                    results.append(data)
                 
-        # 用一條分隔線隔開多個品種
-        final_text = "\n\n------------------\n\n".join(results)
-        return final_text
+        if not results:
+            return f"找到「{keyword}」，但目前無法直接讀取它的預估零售價格 😭"
+            
+        return results
 
     except requests.exceptions.RequestException as e:
         print(f"Request Error: {e}")
@@ -178,14 +245,31 @@ def callback():
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_msg = event.message.text.strip()
-    reply_text = get_vege_price(user_msg)
+    reply_data = get_vege_price(user_msg)
+    
+    if isinstance(reply_data, str):
+        # 如果是字串，代表出錯或找不到
+        messages = [TextMessage(text=reply_data)]
+    elif isinstance(reply_data, list) and len(reply_data) > 0:
+        # 如果是列表，組成 Carousel Flex Message
+        carousel = {
+            "type": "carousel",
+            "contents": reply_data
+        }
+        flex_msg = FlexSendMessage(
+            alt_text=f"【{user_msg}】最新市場行情",
+            contents=FlexContainer.from_dict(carousel)
+        )
+        messages = [flex_msg]
+    else:
+        messages = [TextMessage(text=f"找不到關於「{user_msg}」的價格，系統異常！")]
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=reply_text)]
+                messages=messages
             )
         )
 
