@@ -13,7 +13,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    FlexSendMessage,
+    FlexMessage,
     FlexContainer
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
@@ -256,7 +256,7 @@ def handle_message(event):
             "type": "carousel",
             "contents": reply_data
         }
-        flex_msg = FlexSendMessage(
+        flex_msg = FlexMessage(
             alt_text=f"【{user_msg}】最新市場行情",
             contents=FlexContainer.from_dict(carousel)
         )
