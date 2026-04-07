@@ -258,10 +258,10 @@ def get_vege_price(keyword: str):
         if not matched_items:
             return f"找不到關於「{keyword}」的最新價格資訊哦！"
             
-        matched_items = matched_items[:5]
+        matched_items = matched_items[:10]
         
         results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [executor.submit(fetch_detail, item, headers) for item in matched_items]
             for future in concurrent.futures.as_completed(futures):
                 data = future.result()
